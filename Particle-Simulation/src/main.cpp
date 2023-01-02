@@ -6,12 +6,15 @@
 #include <cstdio>	//For Logging
 #include <cstdint> 
 #include <string>
+#include <chrono>   //For Timing
 
-//Application Constants
-const uint64_t NUM_PARTICLES = 2000; //How many particles to simulate at a time. 
+// CONSTANTS
+
+const uint64_t NUM_PARTICLES = 200000; //How many particles to simulate at a time. 
+const double TARGET_FRAMERATE = 1.0 / 60.0; //The target time to update all particles.
 
 
-//PARTICLES
+// PARTICLES
 
 struct Vector3 {
 	Vector3() {
@@ -54,7 +57,9 @@ struct Particle {
 	float size;
 };
 
+
 // UTILITY
+
 //Outputs a formatted string, representing the number of bytes. (e.g. 4kb instead of 4096 bytes)
 std::string FormatBytes(const uint64_t bytes) {
 	std::string output;
@@ -80,21 +85,48 @@ std::string FormatBytes(const uint64_t bytes) {
 	return output;
 }
 
+//Timing Functor
+class Timer {
+public:
+	explicit Timer(std::string name = "UNNAMED") {
+		profile = name;
+		start = std::chrono::high_resolution_clock::now();
+		printf("\nStarting Timing for [%s]", name.c_str());
+	}
+	~Timer() {
+		end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+		double durSeconds = duration.count() / 1000000.0;
+		printf("\n[%s] finished in %f Seconds\n\t<%f>", profile.c_str(), durSeconds, durSeconds - TARGET_FRAMERATE);
+	}
+
+private:
+	std::string profile;
+	std::chrono::steady_clock::time_point start;
+	std::chrono::steady_clock::time_point end;
+};
+
+
+// APPLICATION
+
 int main()
 {
 	//Display information about what we're processing to the console
-	printf("Particle Simulation\nEwan Burnett (2023)\n----------------------------\n\tNUM_PARTICLES: %u\n\tMemory Consumption: %s", NUM_PARTICLES, FormatBytes(NUM_PARTICLES * sizeof(Particle)).c_str());
+	printf("Particle Simulation\nEwan Burnett (2023)\n----------------------------\n\tNUM_PARTICLES: %lu\n\tMemory Consumption: %s", NUM_PARTICLES, FormatBytes(NUM_PARTICLES * sizeof(Particle)).c_str());
 
 	//Create the particles
 	auto particles = new Particle[NUM_PARTICLES];
 
 	//Process each particle
-	printf("\nProcessing Particles...");
-    for (size_t i = 0; i < NUM_PARTICLES; i++) {
-        auto p = particles[i];
-        p.position = p.position + (p.velocity * p.speed);
-    }
-    printf("\nFinished Processing Particles.");
+	{
+		auto a = Timer("Single Pass");
+		printf("\nProcessing Particles...");
+		for (size_t i = 0; i < NUM_PARTICLES; i++) {
+			auto p = particles[i];
+			p.position = p.position + (p.velocity * p.speed);
+		}
+		printf("\nFinished Processing Particles.");
+	}
 	auto esc = getchar();
 
 	// Cleanup
