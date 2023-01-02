@@ -1,4 +1,6 @@
 #pragma once
+#include "Config.h"
+
 // PARTICLES
 
 struct Vector3 {
@@ -30,16 +32,23 @@ struct Vector3 {
 //AoS Particle structure
 struct Particle {
 	Particle() {
-		position = {};
-		velocity = {};
-		speed = 5.0f;
-		size = 1.0f;
+		positions = new Vector3[NUM_PARTICLES];
+		velocities = new Vector3[NUM_PARTICLES];
+		speeds = new float[NUM_PARTICLES];
+		sizes = new float[NUM_PARTICLES];
 	}
 
-	Vector3 position;
-	Vector3 velocity;
-	float speed;
-	float size;
+	~Particle() {
+		delete[] positions;
+		delete[] velocities;
+		delete[] speeds;
+		delete[] sizes;
+	}
+
+	alignas(16) Vector3* positions;
+	alignas(16) Vector3* velocities;
+	alignas(16) float* speeds;
+	alignas(16) float* sizes;
 };
 
 

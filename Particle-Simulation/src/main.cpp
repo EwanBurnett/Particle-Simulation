@@ -13,6 +13,8 @@
 #include <condition_variable>
 #include <barrier>
 
+#include <immintrin.h>
+
 bool g_Start = false;
 std::mutex g_Lock;
 std::condition_variable g_CVStart;
@@ -37,12 +39,46 @@ void UpdateParticles(Particle* pParticles, uint64_t start, uint64_t end) {
 	}
 
 	for (int f = 0; f < NUM_FRAMES; f++) {
-	//	g_FrameSync.arrive();
 		//Critical Section - Update each particle
 		//Position += velocity * speed * dt
-		for (size_t i = start; i < end; i++) {
-			auto p = pParticles[i];
-			p.position = p.position + (p.velocity * p.speed);
+
+		//Update based on SIMD mode
+		if (SIMD_USE_AVX) { //Update with 8-lane AVX intrinsics
+            __m256* pPos = (__m256*)pParticles->positions;
+			__m256* pVel = (__m256*)pParticles->positions;
+			__m256* pSpd = (__m256*)pParticles->positions;
+
+			for (size_t i = start; i < end; i += (sizeof(__m256) / sizeof(float))) {
+
+				*pPos = _mm256_add_ps(*pPos, _mm256_mul_ps(*pVel, *pSpd));
+
+				pPos++;
+				pVel++;
+				pSpd++;
+			}
+
+		}
+		else if (SIMD_USE_SSE) { //Update with 4-lane SSE intrinsics
+			__m128* pPos = (__m128*)pParticles->positions;
+			__m128* pVel = (__m128*)pParticles->positions;
+			__m128* pSpd = (__m128*)pParticles->positions;
+
+			for (size_t i = start; i < end; i += (sizeof(__m128) / sizeof(float))) {
+
+				*pPos = _mm_add_ps(*pPos, _mm_mul_ps(*pVel, *pSpd));
+
+				pPos++;
+				pVel++;
+				pSpd++;
+			}
+		}
+		else { //Update without SIMD
+            for (size_t i = start; i < end; i++) {
+                auto& pos = pParticles->positions[i];
+				auto vel = pParticles->velocities[i];
+				auto spd = pParticles->speeds[i];
+                pos = pos + (vel * spd);
+            }
 		}
 		g_FrameSync.arrive_and_wait();
 	}
@@ -56,14 +92,14 @@ int main()
 
 
 	//Create the particles
-	auto particles = new Particle[NUM_PARTICLES];
+	Particle particles;
 
 	//Initialize the threads
 	std::vector<std::thread*> threads;
 	for (size_t t = 0; t < NUM_THREADS; t++) {
 		auto work = NUM_PARTICLES / NUM_THREADS;
 		auto range = work * t;
-		threads.push_back(new std::thread(UpdateParticles, particles, range, work + range));
+		threads.push_back(new std::thread(UpdateParticles, &particles, range, work + range));
 	}
 
 	{
@@ -83,9 +119,6 @@ int main()
 		printf("\nFinished Processing Particles.");
 	}
 	auto esc = getchar();
-
-	// Cleanup
-	delete[](particles);
 
 	return 0;
 }
