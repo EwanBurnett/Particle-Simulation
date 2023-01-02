@@ -11,32 +11,48 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <barrier>
 
 bool g_Start = false;
 std::mutex g_Lock;
 std::condition_variable g_CVStart;
+std::barrier g_FrameSync(NUM_THREADS, []() noexcept {
+	printf("\nFinished Update");
+    //Draw
+    //std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	printf("\tFinished Draw");
+});
 
 // APPLICATION
 
 void UpdateParticles(Particle* pParticles, uint64_t start, uint64_t end) {
 
-	auto cvLock = std::unique_lock<std::mutex>(g_Lock);
+	while (!g_Start) //Poll whether the condition variable has been signalled like this, in case of spurious wakeups.
+	{
+		std::unique_lock<std::mutex> cvLock(g_Lock);
 
-	g_CVStart.wait(cvLock, [] {
-		return g_Start;
-	});
+		g_CVStart.wait(cvLock, [] {
+			return g_Start;
+			});
+	}
 
-	for (size_t i = start; i < end; i++) {
-        auto p = pParticles[i];
-        p.position = p.position + (p.velocity * p.speed);
-    }
+	for (int f = 0; f < NUM_FRAMES; f++) {
+	//	g_FrameSync.arrive();
+		//Critical Section - Update each particle
+		//Position += velocity * speed * dt
+		for (size_t i = start; i < end; i++) {
+			auto p = pParticles[i];
+			p.position = p.position + (p.velocity * p.speed);
+		}
+		g_FrameSync.arrive_and_wait();
+	}
 
 }
 
 int main()
 {
 	//Display information about what we're processing to the console
-	printf("Particle Simulation\nEwan Burnett (2023)\n----------------------------\n\tNUM_PARTICLES: %lu\n\tMemory Consumption: %s\n\tNUM_THREADS: %d", NUM_PARTICLES, FormatBytes(NUM_PARTICLES * sizeof(Particle)).c_str(), NUM_THREADS);
+	printf("Particle Simulation\nEwan Burnett (2023)\n----------------------------\n\tNUM_PARTICLES: %lu\n\tMemory Consumption: %s\n\tNUM_THREADS: %d\n\tNUM_FRAMES: %lu", NUM_PARTICLES, FormatBytes(NUM_PARTICLES * sizeof(Particle)).c_str(), NUM_THREADS, NUM_FRAMES);
 
 
 	//Create the particles
@@ -51,12 +67,13 @@ int main()
 	}
 
 	{
-		auto a = Timer("Single Pass");
+		auto a = Timer(std::to_string(NUM_FRAMES) + " Frames");
 		printf("\nProcessing Particles...");
 
 		//Signal to all condition variables to start processing. 
 		g_Start = true;
 		g_CVStart.notify_all();
+
 
 		for (auto t : threads) {
 			t->join();

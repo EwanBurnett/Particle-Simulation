@@ -45,7 +45,7 @@ public:
 		end = std::chrono::high_resolution_clock::now();
 		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 		double durSeconds = duration.count() / 1000000.0;
-		printf("\n[%s] finished in %f Seconds\n\t<%f>", profile.c_str(), durSeconds, durSeconds - TARGET_FRAMERATE);
+		printf("\n[%s] finished in %f Seconds\n\tAverage: <%f>\n\tTarget: <%f>", profile.c_str(), durSeconds, durSeconds / NUM_FRAMES, (durSeconds / NUM_FRAMES) - TARGET_FRAMERATE);
 	}
 
 private:
